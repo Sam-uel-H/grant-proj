@@ -1,0 +1,8 @@
+{
+  "name": "grant-proj",
+  "scripts": {
+    "server": "cd server && node --watch index.js",
+    "client": "cd client && npm run dev",
+    "dev": "start cmd /k npm run server && npm run client"
+  }
+}
