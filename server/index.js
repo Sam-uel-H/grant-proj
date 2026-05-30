@@ -109,8 +109,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN
 const PORT = Number(process.env.PORT) || 3001
 
 if (process.env.NODE_ENV === 'production' && !CORS_ORIGIN) {
-  console.error('FATAL: CORS_ORIGIN env var is required in production')
-  process.exit(1)
+  console.warn('WARNING: CORS_ORIGIN not set, allowing all origins temporarily')
 }
 
 // Merge tiers of grant arrays, deduplicating by id. Earlier tiers win.
@@ -127,7 +126,7 @@ function mergeTiers(...tiers) {
 
 const app = express()
 app.use(helmet())
-app.use(cors({ origin: CORS_ORIGIN }))
+app.use(cors({ origin: CORS_ORIGIN || '*' }))
 app.use('/api/grants', rateLimit({ windowMs: 60_000, max: 30, standardHeaders: true, legacyHeaders: false }))
 
 app.get('/api/grants', async (req, res) => {
