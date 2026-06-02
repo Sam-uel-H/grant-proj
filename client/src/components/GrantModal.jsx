@@ -11,7 +11,31 @@ const STATUS_LABEL = {
 
 const F = '"Inter", system-ui, -apple-system, sans-serif'
 
-export default function GrantModal({ grant, isSaved, onToggleSave, onClose }) {
+// Returns a list of human-readable reasons why this grant matches the profile,
+// or an empty array if nothing matched. Returns null if there's no profile.
+function buildMatchReasons(grant, profile) {
+  if (!profile) return null
+  const reasons = []
+  const text     = ((grant.title || '') + ' ' + (grant.agency || '')).toLowerCase()
+  const cfdaStr  = (grant.cfda_list || []).join(',')
+
+  if (profile.is_veteran && (/veteran|military|armed forces|service member/.test(text) || /\b64\./.test(cfdaStr)))
+    reasons.push('Relates to veterans or military service')
+  if (profile.is_student && (/student|education|scholarship|college|university|academic|school/.test(text) || /\b84\./.test(cfdaStr)))
+    reasons.push('Education-focused grant')
+  if (profile.is_homeowner && (/homeowner|housing|home buyer|residential|mortgage|property/.test(text) || /\b14\./.test(cfdaStr)))
+    reasons.push('Housing or homeownership related')
+  if (profile.entity_type === 'nonprofit'      && /nonprofit|non-profit|community organization|charity/.test(text))
+    reasons.push('Targets nonprofits and community organizations')
+  if (profile.entity_type === 'small_business' && /small business|entrepreneur|startup|business development/.test(text))
+    reasons.push('Designed for small businesses')
+  if (profile.entity_type === 'individual'     && /individual|personal|citizen|family|household/.test(text))
+    reasons.push('Open to individual applicants')
+
+  return reasons
+}
+
+export default function GrantModal({ grant, isSaved, onToggleSave, onClose, profile }) {
   useEffect(() => {
     function onKey(e) { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', onKey)
@@ -57,6 +81,10 @@ export default function GrantModal({ grant, isSaved, onToggleSave, onClose }) {
 
           <div style={styles.divider} />
 
+          {grant.description && (
+            <p style={styles.description}>{grant.description}</p>
+          )}
+
           <div style={styles.grid}>
             <Field label="Opened"   value={grant.open_date  || '—'} />
             <Field label="Deadline" value={grant.close_date || 'Rolling'} />
@@ -67,6 +95,8 @@ export default function GrantModal({ grant, isSaved, onToggleSave, onClose }) {
               <Field label="CFDA" value={grant.cfda_list.join(', ')} />
             )}
           </div>
+
+          <MatchSection grant={grant} profile={profile} />
 
           <div style={styles.actions}>
             <button
@@ -83,6 +113,71 @@ export default function GrantModal({ grant, isSaved, onToggleSave, onClose }) {
       </div>
     </div>
   )
+}
+
+function MatchSection({ grant, profile }) {
+  const reasons = buildMatchReasons(grant, profile)
+  if (reasons === null) return null  // no profile active
+
+  if (reasons.length === 0) {
+    return (
+      <div style={matchStyles.none}>
+        <span style={matchStyles.noneIcon}>○</span>
+        No direct match with your profile — you may still be eligible. Check the full listing for details.
+      </div>
+    )
+  }
+
+  return (
+    <div style={matchStyles.box}>
+      <div style={matchStyles.heading}>✦ Why this may fit you</div>
+      <ul style={matchStyles.list}>
+        {reasons.map(r => <li key={r} style={matchStyles.item}>{r}</li>)}
+      </ul>
+    </div>
+  )
+}
+
+const matchStyles = {
+  box: {
+    background: '#eef2ff',
+    border: '1px solid #c7d2fe',
+    borderRadius: 10,
+    padding: '12px 14px',
+    marginBottom: 20,
+  },
+  heading: {
+    fontSize: 12,
+    fontWeight: 700,
+    color: '#4338ca',
+    letterSpacing: '0.03em',
+    marginBottom: 8,
+    textTransform: 'uppercase',
+  },
+  list: {
+    margin: 0,
+    padding: '0 0 0 16px',
+  },
+  item: {
+    fontSize: 13,
+    color: '#3730a3',
+    fontWeight: 500,
+    lineHeight: 1.6,
+  },
+  none: {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'flex-start',
+    fontSize: 12,
+    color: '#94a3b8',
+    fontWeight: 400,
+    lineHeight: 1.6,
+    marginBottom: 20,
+  },
+  noneIcon: {
+    flexShrink: 0,
+    marginTop: 1,
+  },
 }
 
 function Field({ label, value }) {
@@ -158,6 +253,12 @@ const styles = {
     margin: 0,
     fontSize: 13, color: '#94a3b8', fontWeight: 500,
     letterSpacing: '0.01em',
+  },
+  description: {
+    margin: '0 0 18px',
+    fontSize: 14,
+    color: '#334155',
+    lineHeight: 1.65,
   },
   divider: {
     height: 1,

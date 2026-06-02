@@ -1,26 +1,30 @@
 import { useState, useEffect } from 'react'
 import GrantCard from './components/GrantCard'
 import GrantModal from './components/GrantModal'
+import ProfileModal from './components/ProfileModal'
+import ProfileSetup from './components/ProfileSetup'
 import { formatSync } from './utils.js'
 
-const ENTITY_TYPES = [
-  { value: 'any',            label: 'Anyone' },
-  { value: 'individual',     label: 'Individual' },
-  { value: 'small_business', label: 'Small Business' },
-  { value: 'nonprofit',      label: 'Nonprofit' },
-]
+const API = import.meta.env.VITE_API_URL
+
+const F = '"Inter", system-ui, -apple-system, sans-serif'
 
 export default function App() {
-  const [grants, setGrants]         = useState([])
-  const [loading, setLoading]       = useState(false)
-  const [error, setError]           = useState(null)
-  const [state, setState]           = useState(null)
-  const [syncedAt, setSyncedAt]     = useState(null)
-  const [zip, setZip]               = useState('')
-  const [entityType, setEntityType] = useState('any')
-  const [selectedGrant, setSelectedGrant] = useState(null)
-  const [showSaved, setShowSaved]         = useState(false)
-  const [savedGrants, setSavedGrants]     = useState(() => {
+  // 'setup' = profile intake page | 'results' = grant results page
+  const [view, setView]   = useState('setup')
+  const [profile, setProfile] = useState(null)
+
+  const [grants, setGrants]     = useState([])
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState(null)
+  const [grantState, setGrantState] = useState(null)  // 2-letter state from zip lookup
+  const [syncedAt, setSyncedAt] = useState(null)
+  const [relevantCount, setRelevantCount] = useState(null)
+
+  const [selectedGrant, setSelectedGrant]   = useState(null)
+  const [showEditProfile, setShowEditProfile] = useState(false)
+  const [showSaved, setShowSaved]             = useState(false)
+  const [savedGrants, setSavedGrants]         = useState(() => {
     try { return JSON.parse(localStorage.getItem('grantfinder_saved') || '[]') }
     catch { return [] }
   })
@@ -28,6 +32,73 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('grantfinder_saved', JSON.stringify(savedGrants))
   }, [savedGrants])
+
+  // On first load, check if there's a saved profile ID in localStorage.
+  // If there is, restore the profile from the server and jump straight to results.
+  useEffect(() => {
+    const storedId = localStorage.getItem('grantfinder_profile_id')
+    if (!storedId) return  // stay on setup page
+    fetch(`${API}/api/profile/${storedId}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) {
+          localStorage.removeItem('grantfinder_profile_id')
+          return  // stay on setup page
+        }
+        setProfile(data)
+        setView('results')
+        fetchGrants(data.zip || '', data.entity_type || 'any', data.id)
+      })
+      .catch(() => {})  // stay on setup if network fails
+  }, [])
+
+  // Fetch grants from the API.
+  // zip and entityType come from the profile; profileId triggers server-side scoring.
+  function fetchGrants(zip, entityType, profileId) {
+    setLoading(true)
+    setError(null)
+    const params = new URLSearchParams({ entityType: entityType || 'any' })
+    if (zip && zip.length === 5) params.set('zip', zip)
+    if (profileId)               params.set('profileId', profileId)
+
+    fetch(`${API}/api/grants?${params}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { setError('Something went wrong. Please try again.'); setLoading(false); return }
+        setGrants(data.grants ?? [])
+        setGrantState(data.state)
+        setSyncedAt(data.syncedAt)
+        setRelevantCount(data.relevantCount ?? null)
+        setLoading(false)
+      })
+      .catch(() => { setError('Could not reach the server. Please try again.'); setLoading(false) })
+  }
+
+  // Called by ProfileSetup and ProfileModal after a successful save.
+  // Stores the profile ID, switches to the results view, and fetches personalised grants.
+  function handleProfileSave(savedProfile) {
+    setProfile(savedProfile)
+    localStorage.setItem('grantfinder_profile_id', savedProfile.id)
+    setShowEditProfile(false)
+    setView('results')
+    fetchGrants(savedProfile.zip || '', savedProfile.entity_type || 'any', savedProfile.id)
+  }
+
+  // Called from the "Browse all grants" link on the setup page.
+  // Skips profile creation and shows the generic grant list.
+  function handleBrowse() {
+    setView('results')
+    fetchGrants('', 'any', null)
+  }
+
+  // Wipes the saved profile and returns to the setup page.
+  function handleClearProfile() {
+    setProfile(null)
+    setRelevantCount(null)
+    setGrants([])
+    localStorage.removeItem('grantfinder_profile_id')
+    setView('setup')
+  }
 
   function toggleSave(grant) {
     setSavedGrants(prev =>
@@ -37,100 +108,71 @@ export default function App() {
     )
   }
 
-  function fetchGrants(zipValue, entityValue) {
-    setLoading(true)
-    setError(null)
-    const params = new URLSearchParams({ entityType: entityValue })
-    if (zipValue.length === 5) params.set('zip', zipValue)
-    fetch(`${import.meta.env.VITE_API_URL}/api/grants?${params}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          setError('Something went wrong. Please try again.')
-          setLoading(false)
-          return
-        }
-        setGrants(data.grants ?? [])
-        setState(data.state)
-        setSyncedAt(data.syncedAt)
-        setLoading(false)
-      })
-      .catch(() => {
-        setError('Could not reach the server. Please try again.')
-        setLoading(false)
-      })
-  }
-
-  useEffect(() => { fetchGrants('', 'any') }, [])
-
-  function handleSubmit(e) {
-    e.preventDefault()
-    setShowSaved(false)
-    fetchGrants(zip, entityType)
-  }
-
   const savedIds      = new Set(savedGrants.map(g => g.id))
   const displayGrants = showSaved ? savedGrants : grants
 
+  // ── Setup page ───────────────────────────────────────────────────────────────
+  if (view === 'setup') {
+    return (
+      <>
+        <ProfileSetup onSave={handleProfileSave} onBrowse={handleBrowse} />
+        {/* Grant and profile modals aren't needed on the setup page */}
+      </>
+    )
+  }
+
+  // ── Results page ─────────────────────────────────────────────────────────────
   return (
     <div style={styles.page}>
 
-      {/* ── Hero ── */}
-      <header style={styles.hero}>
-        <div style={styles.heroDots} />
-        <div style={styles.heroGlow} />
-        <div style={styles.heroContent}>
-          <h1 style={styles.logo}>
-            Grant<span style={styles.logoAccent}>Finder</span>
-          </h1>
-          <p style={styles.tagline}>
-            Discover federal and state grants matched to you — free, public data.
-          </p>
-          <form onSubmit={handleSubmit} style={styles.searchBar}>
-            <input
-              type="text"
-              placeholder="Zip code"
-              value={zip}
-              onChange={e => setZip(e.target.value)}
-              maxLength={5}
-              style={styles.input}
-            />
-            <select
-              value={entityType}
-              onChange={e => setEntityType(e.target.value)}
-              style={styles.select}
-            >
-              {ENTITY_TYPES.map(t => (
-                <option key={t.value} value={t.value} style={{ color: '#0f172a', background: '#fff' }}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
-            <button type="submit" style={styles.findBtn}>Find grants</button>
-            <button
-              type="button"
-              onClick={() => setShowSaved(s => !s)}
-              style={{ ...styles.savedBtn, ...(showSaved ? styles.savedBtnActive : {}) }}
-            >
-              {showSaved ? '★' : '☆'} Saved{savedGrants.length > 0 ? ` (${savedGrants.length})` : ''}
-            </button>
-          </form>
+      {/* Compact top bar — replaces the big hero now that the profile drives search */}
+      <header style={styles.topBar}>
+        <span style={styles.topLogo}>
+          Grant<span style={styles.logoAccent}>Finder</span>
+        </span>
+        <div style={styles.topActions}>
+          <button onClick={() => setShowEditProfile(true)} style={styles.editBtn}>
+            {profile
+              ? (profile.name ? `${profile.name} ✎` : 'Edit Profile ✎')
+              : 'Add Profile'}
+          </button>
+          <button onClick={handleClearProfile} style={styles.clearBtn}>
+            Start over
+          </button>
+          <button
+            onClick={() => setShowSaved(s => !s)}
+            style={{ ...styles.savedBtn, ...(showSaved ? styles.savedBtnActive : {}) }}
+          >
+            {showSaved ? '★' : '☆'} Saved{savedGrants.length > 0 ? ` (${savedGrants.length})` : ''}
+          </button>
         </div>
       </header>
 
-      {/* ── Main ── */}
+      {/* Main content */}
       <main style={styles.main}>
+
+        {/* Toolbar row — label on left, sync chip on right */}
         <div style={styles.toolbar}>
           <span style={styles.toolbarLabel}>
             {showSaved
               ? <><strong>{savedGrants.length}</strong> saved grant{savedGrants.length !== 1 ? 's' : ''}</>
-              : state ? <>Grants for <strong>{state}</strong></> : 'All grants'
+              : grantState ? <>Grants for <strong>{grantState}</strong></> : 'All grants'
             }
           </span>
           {!showSaved && syncedAt && (
             <span style={styles.syncChip}>Synced {formatSync(syncedAt)}</span>
           )}
         </div>
+
+        {/* Relevance banner — appears when a profile is active and scoring ran */}
+        {profile && relevantCount !== null && !showSaved && !loading && !error && (
+          <div style={styles.banner}>
+            <span style={styles.bannerIcon}>✦</span>
+            Based on your profile,{' '}
+            <strong>{relevantCount} grant{relevantCount !== 1 ? 's' : ''}</strong>{' '}
+            may be relevant to you{relevantCount > 0 ? ' — shown first.' : '.'}
+          </div>
+        )}
 
         {loading && (
           <div style={styles.center}>
@@ -169,25 +211,34 @@ export default function App() {
             <p style={styles.hint}>
               {showSaved
                 ? 'No saved grants yet — click the bookmark on any card to save it.'
-                : 'No grants found. Try a different filter.'}
+                : 'No grants found.'}
             </p>
           </div>
         )}
       </main>
 
+      {/* Grant detail modal */}
       {selectedGrant && (
         <GrantModal
           grant={selectedGrant}
           isSaved={savedIds.has(selectedGrant.id)}
           onToggleSave={toggleSave}
           onClose={() => setSelectedGrant(null)}
+          profile={profile}
+        />
+      )}
+
+      {/* Profile edit modal (only on results page — setup uses full-page form) */}
+      {showEditProfile && (
+        <ProfileModal
+          profile={profile}
+          onSave={handleProfileSave}
+          onClose={() => setShowEditProfile(false)}
         />
       )}
     </div>
   )
 }
-
-const F = '"Inter", system-ui, -apple-system, sans-serif'
 
 const styles = {
   page: {
@@ -197,101 +248,59 @@ const styles = {
     color: '#0f172a',
   },
 
-  /* ── Hero ── */
-  hero: {
-    position: 'relative',
-    overflow: 'hidden',
-    background: 'linear-gradient(160deg, #050c1f 0%, #0b1c42 55%, #0d2255 100%)',
-    padding: '60px 24px 56px',
-    textAlign: 'center',
+  /* ── Top bar ── */
+  topBar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '14px 24px',
+    background: 'linear-gradient(160deg, #050c1f 0%, #0b1c42 100%)',
+    borderBottom: '1px solid rgba(255,255,255,0.06)',
   },
-  heroDots: {
-    position: 'absolute', inset: 0,
-    backgroundImage: 'radial-gradient(rgba(255,255,255,0.055) 1px, transparent 1px)',
-    backgroundSize: '28px 28px',
-    pointerEvents: 'none',
-  },
-  heroGlow: {
-    position: 'absolute',
-    top: '-40%', left: '50%',
-    transform: 'translateX(-50%)',
-    width: '80%', height: '80%',
-    background: 'radial-gradient(ellipse, rgba(99,102,241,0.2) 0%, transparent 65%)',
-    pointerEvents: 'none',
-  },
-  heroContent: {
-    position: 'relative',
-    maxWidth: 640,
-    margin: '0 auto',
-  },
-  logo: {
-    margin: '0 0 14px',
-    fontSize: 46,
+  topLogo: {
+    fontSize: 22,
     fontWeight: 800,
-    letterSpacing: '-1.5px',
+    letterSpacing: '-0.8px',
     color: '#fff',
-    lineHeight: 1,
+    fontFamily: F,
   },
   logoAccent: {
     color: '#818cf8',
   },
-  tagline: {
-    margin: '0 0 36px',
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.52)',
-    fontWeight: 400,
-    lineHeight: 1.6,
-    letterSpacing: '0.01em',
-  },
-  searchBar: {
+  topActions: {
     display: 'flex',
     gap: 8,
-    justifyContent: 'center',
-    flexWrap: 'wrap',
+    alignItems: 'center',
   },
-  input: {
-    padding: '12px 16px',
-    borderRadius: 10,
-    border: '1px solid rgba(255,255,255,0.1)',
-    background: 'rgba(255,255,255,0.08)',
-    color: '#fff',
-    fontSize: 14,
-    width: 130,
-    outline: 'none',
-    fontFamily: F,
-    letterSpacing: '0.01em',
-  },
-  select: {
-    padding: '12px 14px',
-    borderRadius: 10,
-    border: '1px solid rgba(255,255,255,0.1)',
-    background: 'rgba(255,255,255,0.08)',
-    color: '#fff',
-    fontSize: 14,
-    cursor: 'pointer',
-    outline: 'none',
-    fontFamily: F,
-  },
-  findBtn: {
-    padding: '12px 24px',
-    borderRadius: 10,
-    border: 'none',
-    background: 'linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)',
-    boxShadow: '0 1px 3px rgba(79,70,229,0.5), 0 4px 14px rgba(79,70,229,0.3)',
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: 600,
+  editBtn: {
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: '1px solid rgba(255,255,255,0.15)',
+    background: 'rgba(255,255,255,0.07)',
+    color: 'rgba(255,255,255,0.75)',
+    fontSize: 13,
+    fontWeight: 500,
     cursor: 'pointer',
     fontFamily: F,
-    letterSpacing: '0.01em',
+  },
+  clearBtn: {
+    padding: '8px 14px',
+    borderRadius: 8,
+    border: '1px solid rgba(248,113,113,0.35)',
+    background: 'rgba(248,113,113,0.1)',
+    color: 'rgba(252,165,165,0.9)',
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: 'pointer',
+    fontFamily: F,
   },
   savedBtn: {
-    padding: '12px 18px',
-    borderRadius: 10,
+    padding: '8px 14px',
+    borderRadius: 8,
     border: '1px solid rgba(255,255,255,0.15)',
     background: 'transparent',
     color: 'rgba(255,255,255,0.72)',
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 500,
     cursor: 'pointer',
     fontFamily: F,
@@ -300,20 +309,20 @@ const styles = {
     background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
     border: '1px solid transparent',
     color: '#fff',
-    boxShadow: '0 1px 3px rgba(245,158,11,0.45), 0 4px 12px rgba(245,158,11,0.25)',
+    boxShadow: '0 1px 3px rgba(245,158,11,0.45)',
   },
 
   /* ── Main ── */
   main: {
     maxWidth: 960,
     margin: '0 auto',
-    padding: '32px 20px 72px',
+    padding: '28px 20px 72px',
   },
   toolbar: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 14,
     flexWrap: 'wrap',
     gap: 8,
   },
@@ -330,6 +339,25 @@ const styles = {
     borderRadius: 6,
     padding: '4px 10px',
     fontWeight: 500,
+  },
+  banner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    background: '#eef2ff',
+    border: '1px solid #c7d2fe',
+    borderRadius: 10,
+    padding: '10px 16px',
+    fontSize: 13,
+    color: '#3730a3',
+    fontWeight: 500,
+    marginBottom: 16,
+    lineHeight: 1.5,
+  },
+  bannerIcon: {
+    fontSize: 14,
+    color: '#6366f1',
+    flexShrink: 0,
   },
   countLine: {
     fontSize: 12,
