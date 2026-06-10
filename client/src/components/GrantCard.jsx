@@ -19,7 +19,9 @@ export default function GrantCard({ grant, isSaved, onToggleSave, onCardClick })
 
   const title   = decode(grant.title)
   const urgency = deadlineLabel(grant.close_date)
-  const isCA    = grant.source === 'california'
+  const isCA       = grant.source === 'california'
+  const isCurated  = grant.source === 'curated'
+  const isCOS      = grant.source === 'careeronestop'
   const isOpen  = grant.status === 'posted' || grant.status === 'active'
 
   const statusLabel = STATUS_LABEL[grant.status] || grant.status || 'Unknown'
@@ -49,6 +51,16 @@ export default function GrantCard({ grant, isSaved, onToggleSave, onCardClick })
               California
             </span>
           )}
+          {isCurated && (
+            <span style={{ ...styles.badge, background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
+              Featured Program
+            </span>
+          )}
+          {isCOS && (
+            <span style={{ ...styles.badge, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+              CareerOneStop
+            </span>
+          )}
         </div>
         <div style={styles.topRight}>
           {urgency && (
@@ -68,6 +80,14 @@ export default function GrantCard({ grant, isSaved, onToggleSave, onCardClick })
 
       <h2 style={styles.title}>{title}</h2>
       <p style={styles.agency}>{grant.agency}</p>
+
+      {grant.match_reasons?.length > 0 && (
+        <div style={styles.reasons}>
+          {grant.match_reasons.map(r => (
+            <span key={r} style={styles.reasonPill}>{r}</span>
+          ))}
+        </div>
+      )}
 
       <div style={styles.metaRow}>
         <MetaField label="Opened"   value={grant.open_date  || '—'} />
@@ -183,6 +203,21 @@ const styles = {
     color: '#6366f1',
     fontWeight: 600,
     textDecoration: 'none',
+    letterSpacing: '0.01em',
+  },
+  reasons: {
+    display: 'flex',
+    gap: 6,
+    flexWrap: 'wrap',
+  },
+  reasonPill: {
+    fontSize: 11,
+    fontWeight: 600,
+    background: '#eef2ff',
+    color: '#4338ca',
+    border: '1px solid #c7d2fe',
+    borderRadius: 10,
+    padding: '2px 8px',
     letterSpacing: '0.01em',
   },
 }

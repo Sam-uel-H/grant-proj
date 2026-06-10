@@ -11,29 +11,6 @@ const STATUS_LABEL = {
 
 const F = '"Inter", system-ui, -apple-system, sans-serif'
 
-// Returns a list of human-readable reasons why this grant matches the profile,
-// or an empty array if nothing matched. Returns null if there's no profile.
-function buildMatchReasons(grant, profile) {
-  if (!profile) return null
-  const reasons = []
-  const text     = ((grant.title || '') + ' ' + (grant.agency || '')).toLowerCase()
-  const cfdaStr  = (grant.cfda_list || []).join(',')
-
-  if (profile.is_veteran && (/veteran|military|armed forces|service member/.test(text) || /\b64\./.test(cfdaStr)))
-    reasons.push('Relates to veterans or military service')
-  if (profile.is_student && (/student|education|scholarship|college|university|academic|school/.test(text) || /\b84\./.test(cfdaStr)))
-    reasons.push('Education-focused grant')
-  if (profile.is_homeowner && (/homeowner|housing|home buyer|residential|mortgage|property/.test(text) || /\b14\./.test(cfdaStr)))
-    reasons.push('Housing or homeownership related')
-  if (profile.entity_type === 'nonprofit'      && /nonprofit|non-profit|community organization|charity/.test(text))
-    reasons.push('Targets nonprofits and community organizations')
-  if (profile.entity_type === 'small_business' && /small business|entrepreneur|startup|business development/.test(text))
-    reasons.push('Designed for small businesses')
-  if (profile.entity_type === 'individual'     && /individual|personal|citizen|family|household/.test(text))
-    reasons.push('Open to individual applicants')
-
-  return reasons
-}
 
 export default function GrantModal({ grant, isSaved, onToggleSave, onClose, profile }) {
   useEffect(() => {
@@ -67,6 +44,16 @@ export default function GrantModal({ grant, isSaved, onToggleSave, onClose, prof
             {grant.source === 'california' && (
               <span style={{ ...styles.badge, background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe' }}>
                 California
+              </span>
+            )}
+            {grant.source === 'curated' && (
+              <span style={{ ...styles.badge, background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
+                Featured Program
+              </span>
+            )}
+            {grant.source === 'careeronestop' && (
+              <span style={{ ...styles.badge, background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0' }}>
+                CareerOneStop
               </span>
             )}
             {urgency && (
@@ -116,8 +103,8 @@ export default function GrantModal({ grant, isSaved, onToggleSave, onClose, prof
 }
 
 function MatchSection({ grant, profile }) {
-  const reasons = buildMatchReasons(grant, profile)
-  if (reasons === null) return null  // no profile active
+  if (!profile) return null
+  const reasons = grant.match_reasons ?? []
 
   if (reasons.length === 0) {
     return (

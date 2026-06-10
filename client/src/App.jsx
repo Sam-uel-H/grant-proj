@@ -20,6 +20,7 @@ export default function App() {
   const [grantState, setGrantState] = useState(null)  // 2-letter state from zip lookup
   const [syncedAt, setSyncedAt] = useState(null)
   const [relevantCount, setRelevantCount] = useState(null)
+  const [limit, setLimit]       = useState(25)
 
   const [selectedGrant, setSelectedGrant]   = useState(null)
   const [showEditProfile, setShowEditProfile] = useState(false)
@@ -54,10 +55,11 @@ export default function App() {
 
   // Fetch grants from the API.
   // zip and entityType come from the profile; profileId triggers server-side scoring.
-  function fetchGrants(zip, entityType, profileId) {
+  function fetchGrants(zip, entityType, profileId, newLimit = 25) {
     setLoading(true)
     setError(null)
-    const params = new URLSearchParams({ entityType: entityType || 'any' })
+    setLimit(newLimit)
+    const params = new URLSearchParams({ entityType: entityType || 'any', limit: newLimit })
     if (zip && zip.length === 5) params.set('zip', zip)
     if (profileId)               params.set('profileId', profileId)
 
@@ -72,6 +74,11 @@ export default function App() {
         setLoading(false)
       })
       .catch(() => { setError('Could not reach the server. Please try again.'); setLoading(false) })
+  }
+
+  function handleShowMore() {
+    const newLimit = limit + 25
+    fetchGrants(profile?.zip || '', profile?.entity_type || 'any', profile?.id || null, newLimit)
   }
 
   // Called by ProfileSetup and ProfileModal after a successful save.
@@ -204,6 +211,20 @@ export default function App() {
               ))}
             </div>
           </>
+        )}
+
+        {!loading && !error && !showSaved && grants.length >= limit && (
+          <div style={styles.showMoreRow}>
+            <button onClick={handleShowMore} style={styles.showMoreBtn}>
+              Show more grants
+            </button>
+          </div>
+        )}
+
+        {!showSaved && grants.some(g => g.source === 'careeronestop') && (
+          <p style={styles.cosAttribution}>
+            Some results powered by <strong>CareerOneStop</strong> — data provided by the U.S. Department of Labor Employment and Training Administration (DOLETA) and the Minnesota Department of Employment &amp; Economic Development (DEED).
+          </p>
         )}
 
         {!loading && !error && displayGrants.length === 0 && (
@@ -393,5 +414,30 @@ const styles = {
     gap: 14,
     gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
     animation: 'fadeUp 0.3s ease',
+  },
+  showMoreRow: {
+    display: 'flex',
+    justifyContent: 'center',
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
+  showMoreBtn: {
+    padding: '10px 28px',
+    borderRadius: 9,
+    border: '1.5px solid #c7d2fe',
+    background: '#eef2ff',
+    color: '#4338ca',
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: 'pointer',
+    fontFamily: F,
+    letterSpacing: '0.01em',
+  },
+  cosAttribution: {
+    fontSize: 11,
+    color: '#94a3b8',
+    textAlign: 'center',
+    margin: '16px 0 0',
+    lineHeight: 1.6,
   },
 }

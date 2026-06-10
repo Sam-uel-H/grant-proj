@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react'
 
-const AGE_RANGES = ['', 'Under 18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+']
+const AGE_RANGES    = ['', 'Under 18', '18–24', '25–34', '35–44', '45–54', '55–64', '65+']
+const INCOME_RANGES = ['', 'Under $25,000', '$25,000–$50,000', '$50,000–$75,000', '$75,000–$100,000', 'Over $100,000', 'Prefer not to say']
+const OCCUPATIONS   = [
+  '', 'Teacher / Educator', 'Nurse / Healthcare Worker', 'Farmer / Agriculture',
+  'Social Worker / Counselor', 'Artist / Creative', 'Engineer / Scientist',
+  'Construction / Skilled Trades', 'Lawyer / Legal', 'Cook / Food Service',
+  'Driver / Logistics', 'Firefighter / First Responder', 'Accountant / Finance',
+  'Mechanic / Technician', 'Programmer / IT', 'Child Care / Early Childhood', 'Other',
+]
 
 const ENTITY_PILLS = [
   ['individual',     'Individual'],
@@ -21,6 +29,8 @@ export default function ProfileModal({ profile, onSave, onClose }) {
     name:         profile?.name         || '',
     zip:          profile?.zip          || '',
     age_range:    profile?.age_range    || '',
+    income_range: profile?.income_range || '',
+    occupation:   profile?.occupation   || '',
     entity_type:  profile?.entity_type  || '',
     is_student:   profile?.is_student   || false,
     is_veteran:   profile?.is_veteran   || false,
@@ -87,6 +97,16 @@ export default function ProfileModal({ profile, onSave, onClose }) {
           <Field label="Age Range">
             <select style={{ ...styles.select, maxWidth: 180 }} value={form.age_range} onChange={set('age_range')}>
               {AGE_RANGES.map(r => <option key={r} value={r}>{r || 'Select...'}</option>)}
+            </select>
+          </Field>
+          <Field label="Annual Household Income">
+            <select style={{ ...styles.select, maxWidth: 260 }} value={form.income_range} onChange={set('income_range')}>
+              {INCOME_RANGES.map(r => <option key={r} value={r}>{r || 'Select...'}</option>)}
+            </select>
+          </Field>
+          <Field label="Occupation (optional)">
+            <select style={styles.select} value={form.occupation} onChange={set('occupation')}>
+              {OCCUPATIONS.map(o => <option key={o} value={o}>{o || 'Select...'}</option>)}
             </select>
           </Field>
 
